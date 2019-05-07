@@ -142,7 +142,7 @@ class GPTHeader():
                                   self.number_of_partition_entries,
                                   self.size_of_partition_entry,
                                   self.partition_entry_array_crc32)
-        return binascii.crc32(header_crc32_input)
+        return binascii.crc32(header_crc32_input) & 0xffffffff
 
 
 class GPTPartitionEntry():
@@ -172,22 +172,22 @@ class GPTPartitionEntry():
 
 
 def calculate_partition_entry_array_crc32(data):
-    return binascii.crc32(data)
+    return binascii.crc32(data) & 0xffffffff
 
 
 def encode_mbr(mbr):
-    partition_record = bytes()
+    partition_record = bytearray()
     for i in range(0, 4):
-        partition = input.partitions[i]
-        partition_record.append(pack('< B B B B B B B B I I',
+        partition = mbr.partitions[i]
+        partition_record.extend(pack('< B B B B B B B B I I',
                                      partition.boot_indicator,
-                                     partition.start_chs[0],
                                      partition.start_chs[1],
                                      partition.start_chs[2],
+                                     partition.start_chs[0],
                                      partition.os_type,
-                                     partition.end_chs[0],
                                      partition.end_chs[1],
                                      partition.end_chs[2],
+                                     partition.end_chs[0],
                                      partition.lba_ss[0],
                                      partition.lba_ss[1]))
 
@@ -195,7 +195,7 @@ def encode_mbr(mbr):
                   mbr.bootstrap_code,
                   mbr.unique_mbr_disk_signature,
                   mbr.unknown,
-                  partition_record,
+                  bytes(partition_record),
                   mbr.signature)
     return output
 
@@ -298,9 +298,9 @@ def encode_gpt_partition_entry(gpt_partition_entry):
     data = pack('<16s 16s Q Q Q 72s',
             gpt_partition_entry.partition_type_guid_raw,
             gpt_partition_entry.unique_partition_guid_raw,
-            gpt_partition_entry.start_lba,
+            gpt_partition_entry.starting_lba,
             gpt_partition_entry.ending_lba,
-            gpt_partition_entry.attributes,
+            gpt_partition_entry.attributes_raw,
             gpt_partition_entry.partition_name_raw)
     return data
 
@@ -322,14 +322,14 @@ def decode_gpt_partition_entry(data):
 
 
 def encode_gpt_partition_entry_array(gpt_partition_entries, size, count):
-    data = bytes()
+    data = bytearray()
     for i in range(0, count):
         d = encode_gpt_partition_entry(gpt_partition_entries[i])
-        data.append(d)
+        data.extend(d)
         # fill with zeroes if less than size
         if len(d) < size:
-            data.append(bytes(size - len(d)))
-    return data
+            data.extend(bytearray(size - len(d)))
+    return bytes(data)
 
 
 def decode_gpt_partition_entry_array(data, size, count):
